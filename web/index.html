@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hybrid Cipher Studio</title>
+<style>
+:root{--bg:#eef1f6;--card:#fff;--ink:#14213d;--mute:#5b6783;--line:#d9dfeb;--acc:#3a4fe8;--hi:#ffc233;--ok:#0f8a5f;--bad:#c0392b;--mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace}
+@media(prefers-color-scheme:dark){:root{--bg:#10172a;--card:#182139;--ink:#e8ecf7;--mute:#9aa6c4;--line:#2a3558;--acc:#7b8cff;--hi:#e6a800}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Segoe UI",system-ui,-apple-system,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:40px 20px 56px}
+h1{font-size:clamp(28px,5vw,44px);letter-spacing:-.02em;margin:0 0 6px;line-height:1.1}
+.sub{color:var(--mute);margin:0 0 28px;max-width:60ch}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+h2{font-size:15px;margin:0 0 14px}
+label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}
+textarea,input{width:100%;font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:120px;resize:vertical}
+textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;margin-bottom:6px}
+.seg button{border:0;background:none;color:var(--mute);font:inherit;font-weight:600;padding:7px 18px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--acc);color:#fff}
+.hint{font-size:12.5px;color:var(--mute);margin-top:4px}
+.err{color:var(--bad);font-size:13px;min-height:20px;margin-top:10px}
+.stage{border-left:3px solid var(--line);padding:2px 0 2px 14px;margin:0 0 16px}
+.stage b{font-size:13px}
+.stage code{display:block;font-family:var(--mono);font-size:14px;word-break:break-all;margin-top:4px;min-height:22px}
+.final{border-color:var(--acc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.btn{font:inherit;font-weight:600;font-size:13.5px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer}
+.btn:hover{border-color:var(--acc)}
+.sq{border-collapse:separate;border-spacing:4px;margin:4px auto 0}
+.sq th{font:600 12px var(--mono);color:var(--mute);width:46px}
+.sq td{width:46px;height:46px;text-align:center;border:1px solid var(--line);border-radius:9px;font:600 18px var(--mono);transition:background .25s,transform .25s}
+.sq td.on{background:var(--hi);border-color:var(--hi);color:#14213d;transform:scale(1.07)}
+.wide{grid-column:1/-1}
+</style>
+</head>
+<body>
+<main>
+<h1>Hybrid Cipher Studio</h1>
+<p class="sub">Vigenère shifts the letters, then a keyed Polybius square turns each one into a pair of digits. Type below and watch both stages update.</p>
+<div class="grid">
+<section class="card" aria-label="Input">
+  <div class="seg" role="group" aria-label="Mode">
+    <button id="mEnc" aria-pressed="true">Encrypt</button><button id="mDec" aria-pressed="false">Decrypt</button>
+  </div>
+  <label for="msg" id="msgLbl">Message</label>
+  <textarea id="msg" spellcheck="false">Meet at the north gate at dawn</textarea>
+  <label for="k1">Vigenère key</label>
+  <input id="k1" value="LEMON" autocomplete="off" spellcheck="false">
+  <label for="k2">Polybius square keyword (optional)</label>
+  <input id="k2" value="MONARCHY" autocomplete="off" spellcheck="false">
+  <p class="hint">Letters A–Z and spaces are kept (J is treated as I); punctuation and digits are dropped. A / in the ciphertext marks a space. Both keys are needed to decrypt.</p>
+  <div class="err" id="err" role="alert"></div>
+</section>
+<section class="card" aria-label="Result">
+  <div class="stage"><b id="s0t">Cleaned message</b><code id="s0"></code></div>
+  <div class="stage"><b id="s1t">Stage 1: Vigenère</b><code id="s1"></code></div>
+  <div class="stage final"><b id="s2t">Stage 2: Polybius</b><code id="s2"></code></div>
+  <div class="row"><button class="btn" id="copy">Copy result</button><button class="btn" id="swap">Use result as input</button></div>
+</section>
+<section class="card wide" aria-label="Polybius square">
+  <h2>Your Polybius square (highlighted letters appear in stage 1)</h2>
+  <table class="sq" id="sq"></table>
+</section>
+</div>
+</main>
+<script>
+const AL="ABCDEFGHIKLMNOPQRSTUVWXYZ",$=i=>document.getElementById(i);
+const clean=s=>[...s.toUpperCase().replace(/J/g,"I")].filter(c=>AL.includes(c)).join("");
+const square=k=>[...new Set(clean(k)+AL)].join("");
+const vig=(t,k,d)=>{k=clean(k);return [...t].map((c,i)=>AL[(AL.indexOf(c)+(d?-1:1)*AL.indexOf(k[i%k.length])+25)%25]).join("")};
+const pEnc=(t,sq)=>[...t].map(c=>{const i=sq.indexOf(c);return(1+(i/5|0))+""+(1+i%5)}).join(" ");
+const pDec=(s,sq)=>{const d=s.replace(/[^1-5]/g,"");let o="";for(let i=0;i+1<d.length;i+=2)o+=sq[(d[i]-1)*5+(+d[i+1]-1)];return o};
+const split=(s,w)=>{let i=0;return w.map(x=>{const r=s.slice(i,i+x.length);i+=x.length;return r})};
+let enc=true,result="";
+function setMode(e){enc=e;$("mEnc").setAttribute("aria-pressed",e);$("mDec").setAttribute("aria-pressed",!e);$("msgLbl").textContent=e?"Message":"Ciphertext (digit pairs)";run()}
+function run(){
+  const k1=clean($("k1").value),sq=square($("k2").value),m=$("msg").value;let s0,s1,s2,used;
+  $("err").textContent=k1?"":"Enter a Vigenère key with at least one letter.";
+  if(!k1){["s0","s1","s2"].forEach(i=>$(i).textContent="");result="";draw(sq,"");return}
+  if(enc){const w=m.split(/\s+/).map(clean).filter(Boolean),sh=split(vig(w.join(""),k1,false),w);s0=w.join(" ");s1=sh.join(" ");s2=sh.map(x=>pEnc(x,sq)).join(" / ");used=s1;
+    $("s0t").textContent="Cleaned message";$("s1t").textContent="Stage 1: Vigenère";$("s2t").textContent="Stage 2: Polybius";
+    $("s0").textContent=s0;$("s1").textContent=s1;$("s2").textContent=s2;result=s2}
+  else{const pr=m.split("/").map(x=>pDec(x,sq)).filter(Boolean);s0=m.replace(/[^1-5 \/]/g,"").trim();s1=pr.join(" ");s2=split(vig(pr.join(""),k1,true),pr).join(" ");used=s1;
+    $("s0t").textContent="Digit pairs";$("s1t").textContent="Stage 1: undo Polybius";$("s2t").textContent="Stage 2: undo Vigenère";
+    $("s0").textContent=s0;$("s1").textContent=s1;$("s2").textContent=s2;result=s2}
+  draw(sq,used)}
+function draw(sq,used){const t=$("sq");t.textContent="";const h=t.insertRow().appendChild(document.createElement("th"));
+  const hr=t.rows[0];for(let c=1;c<=5;c++){const th=document.createElement("th");th.textContent=c;hr.appendChild(th)}
+  for(let r=0;r<5;r++){const tr=t.insertRow(),th=document.createElement("th");th.textContent=r+1;tr.appendChild(th);
+    for(let c=0;c<5;c++){const td=tr.insertCell(),ch=sq[r*5+c];td.textContent=ch;if(used.includes(ch))td.className="on"}}}
+$("mEnc").onclick=()=>setMode(true);$("mDec").onclick=()=>setMode(false);
+["msg","k1","k2"].forEach(i=>$(i).addEventListener("input",run));
+$("copy").onclick=async e=>{try{await navigator.clipboard.writeText(result);e.target.textContent="Copied"}catch{e.target.textContent="Copy failed"}setTimeout(()=>e.target.textContent="Copy result",1400)};
+$("swap").onclick=()=>{if(!result)return;$("msg").value=result;setMode(!enc)};
+run();
+</script>
+</body>
+</html>
